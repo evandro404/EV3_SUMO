@@ -1,71 +1,90 @@
 #!/usr/bin/env pybricks-micropython
 from pybricks.hubs import EV3Brick
-from pybricks.ev3devices import (Motor, ColorSensor, UltrasonicSensor)
+from pybricks.ev3devices import (Motor, ColorSensor, UltrasonicSensor, InfraredSensor)
 from pybricks.parameters import Port, Stop
 from pybricks.tools import wait
 from pybricks.robotics import DriveBase
 from pybricks.media.ev3dev import SoundFile
 
-
 # --- 1. INICIALIZAÇÃO DOS OBJETOS ---
 ev3 = EV3Brick()
 
-# Motores (Verifique se as portas B e C estão corretas)
+# Motores (Portas B e C)
 left_motor = Motor(Port.B)
 right_motor = Motor(Port.C)
 
-# Sensores: Assumindo a posição dos sensores. Altere conforme sua montagem.
-# Corrigido: Adicionado o prefixo "Port." que estava faltando.
-left_color_sensor = ColorSensor(Port.S3)  # Sensor da esquerda
-right_color_sensor = ColorSensor(Port.S2) # Sensor da direita
-ultrasonic_sensor = UltrasonicSensor(Port.S4)
+# --- ATENÇÃO: Portas atualizadas conforme sua nova montagem! ---
+infrared_sensor = InfraredSensor(Port.S1)
+ultrasonic_sensor = UltrasonicSensor(Port.S2)
+right_color_sensor = ColorSensor(Port.S3) # Sensor da direita
+left_color_sensor = ColorSensor(Port.S4)  # Sensor da esquerda
 
-# Base do Robô (Meça e ajuste o diâmetro da roda e a distância entre eixos)
+# Base do Robô
 robot = DriveBase(left_motor, right_motor, wheel_diameter=56, axle_track=120)
 
 # --- 2. CONSTANTES E CALIBRAÇÃO ---
-# Ajuste estes valores para otimizar o robô.
-WHITE_LINE_THRESHOLD = 50  # Limite de reflexão para a linha branca
-ATTACK_DISTANCE_MM = 400   # Distância em mm para iniciar o ataque
-ATTACK_SPEED = -1000       # Velocidade de ataque (negativa para ir para frente)
-RETREAT_DISTANCE = -200    # Distância de recuo (negativa para ir para trás)
-SEARCH_TURN_RATE = 170     # Velocidade de giro ao procurar
-SMART_TURN_ANGLE = 100     # Ângulo de giro para a retirada inteligente
+# Ajuste estes valores para otimizar o robô NO LOCAL DA COMPETIÇÃO!
+WHITE_LINE_THRESHOLD = 50       # Limite de reflexão para a linha branca
+
+# Constantes de Ataque
+IR_ATTACK_PROXIMITY = 40        # Limite de proximidade para o ataque do IR (0-100). MENOR = MAIS PERTO.
+US_ATTACK_DISTANCE_MM = 400     # Distância em mm para o ataque do Ultrassônico.
+ATTACK_SPEED = -1000            # Velocidade de ataque padrão/longa distância.
+IR_ATTACK_SPEED = -1200         # Velocidade de ataque a curta distância (MAIS AGRESSIVO).
+
+# Constantes de Manobra
+RETREAT_DISTANCE = -150         # Distância de recuo ao ver a linha.
+SMART_TURN_ANGLE = 120          # Ângulo de giro para a fuga da borda.
+
+# Constantes de Busca Ativa
+SEARCH_SPEED = -250             # Velocidade de avanço durante a busca.
+SEARCH_CURVE_RATE = 100         # Agressividade da curva na busca.
 
 # --- 3. PROGRAMA PRINCIPAL ---
-#ev3.speaker.set_volume(50)
-#ev3.speaker.play_file(SoundFile.HORN_1)
-print("Pronto para o combate!")
 wait(1000)
 
 # Loop principal de combate
 while True:
-    # --- PRIORIDADE 1: EVITAR A BORDA (LÓGICA MELHORADA) ---
-    # Verifica de forma inteligente qual sensor detectou a linha
-    if left_color_sensor.reflection() > WHITE_LINE_THRESHOLD:
-        print("Borda detectada à ESQUERDA! Virando para a direita.")
+    # --- PRIORIDADE 1: EVITAR A BORDA ---
+    left_sees_line = left_color_sensor.reflection() > WHITE_LINE_THRESHOLD
+    right_sees_line = right_color_sensor.reflection() > WHITE_LINE_THRESHOLD
+
+    if left_sees_line and right_sees_line:
+        print("Borda detectada em AMBOS! Perigo!")
         robot.stop()
-        robot.straight(RETREAT_DISTANCE / 2) # Recua um pouco
-        robot.turn(SMART_TURN_ANGLE)         # Vira para a direita para escapar
+        robot.straight(RETREAT_DISTANCE)
+        robot.turn(180) # Manobra de emergência
+        continue
+
+    elif left_sees_line:
+        print("Borda à ESQUERDA! Virando para a direita.")
+        robot.stop()
+        robot.straight(RETREAT_DISTANCE)
+        robot.turn(SMART_TURN_ANGLE)
         continue
     
-    elif right_color_sensor.reflection() > WHITE_LINE_THRESHOLD:
-        print("Borda detectada à DIREITA! Virando para a esquerda.")
+    elif right_sees_line:
+        print("Borda à DIREITA! Virando para a esquerda.")
         robot.stop()
-        robot.straight(RETREAT_DISTANCE / 2) # Recua um pouco
-        robot.turn(-SMART_TURN_ANGLE)        # Vira para a esquerda para escapar
+        robot.straight(RETREAT_DISTANCE)
+        robot.turn(-SMART_TURN_ANGLE)
         continue
 
+    # --- PRIORIDADE 2: ATAQUE CURTA DISTÂNCIA (SENSOR INFRAVERMELHO) ---
+    if infrared_sensor.distance() < IR_ATTACK_PROXIMITY:
+        print("ALVO PRÓXIMO (IR)! ATAQUE TOTAL!")
+        robot.drive(IR_ATTACK_SPEED, 0)
+        continue
 
-    # --- PRIORIDADE 2: ATACAR OPONENTE ---
-    if ultrasonic_sensor.distance() < ATTACK_DISTANCE_MM:
-        print("Oponente detectado! Atacar!")
+    # --- PRIORIDADE 3: ATAQUE LONGA DISTÂNCIA (SENSOR ULTRASSÔNICO) ---
+    if ultrasonic_sensor.distance() < US_ATTACK_DISTANCE_MM:
+        print("Oponente a distância (US)! Aproximando...")
         robot.drive(ATTACK_SPEED, 0)
         continue
 
-    # --- PRIORIDADE 3: PROCURAR OPONENTE ---
+    # --- PRIORIDADE 4: PROCURAR OPONENTE (BUSCA ATIVA) ---
     else:
-        print("Procurando...")
-        robot.drive(0, SEARCH_TURN_RATE)
+        print("Procurando oponente...")
+        robot.drive(SEARCH_SPEED, SEARCH_CURVE_RATE)
 
     wait(10)
