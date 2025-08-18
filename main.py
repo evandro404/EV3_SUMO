@@ -16,15 +16,15 @@ right_motor = Motor(Port.C)
 # --- ATENÇÃO: Portas atualizadas conforme sua nova montagem! ---
 infrared_sensor = InfraredSensor(Port.S1)
 ultrasonic_sensor = UltrasonicSensor(Port.S2)
-right_color_sensor = ColorSensor(Port.S3) # Sensor da direita
-left_color_sensor = ColorSensor(Port.S4)  # Sensor da esquerda
+right_color_sensor = ColorSensor(Port.S4) # Sensor da direita
+left_color_sensor = ColorSensor(Port.S3)  # Sensor da esquerda
 
 # Base do Robô
 robot = DriveBase(left_motor, right_motor, wheel_diameter=56, axle_track=120)
 
 # --- 2. CONSTANTES E CALIBRAÇÃO ---
 # Ajuste estes valores para otimizar o robô NO LOCAL DA COMPETIÇÃO!
-WHITE_LINE_THRESHOLD = 50       # Limite de reflexão para a linha branca
+WHITE_LINE_THRESHOLD = 20      # Limite de reflexão para a linha branca
 
 # Constantes de Ataque
 IR_ATTACK_PROXIMITY = 40        # Limite de proximidade para o ataque do IR (0-100). MENOR = MAIS PERTO.
@@ -34,7 +34,7 @@ ATTACK_SPEED = -400             # Velocidade de ataque padrão/longa distância 
 IR_ATTACK_SPEED = -700          # Velocidade de ataque a curta distância (reduzida).
 
 # Constantes de Manobra
-RETREAT_DISTANCE = -150         # Distância de recuo ao ver a linha.
+RETREAT_DISTANCE = 150         # Distância de recuo ao ver a linha.
 SMART_TURN_ANGLE = 120          # Ângulo de giro para a fuga da borda.
 
 # Constantes de Busca Ativa
@@ -48,7 +48,7 @@ def emergency_stop():
     wait(150)
 
 # --- 3. PROGRAMA PRINCIPAL ---
-wait(1000)
+wait(5000)
 
 # Loop principal de combate
 while True:
