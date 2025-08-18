@@ -29,16 +29,23 @@ WHITE_LINE_THRESHOLD = 50       # Limite de reflexão para a linha branca
 # Constantes de Ataque
 IR_ATTACK_PROXIMITY = 40        # Limite de proximidade para o ataque do IR (0-100). MENOR = MAIS PERTO.
 US_ATTACK_DISTANCE_MM = 400     # Distância em mm para o ataque do Ultrassônico.
-ATTACK_SPEED = -1000            # Velocidade de ataque padrão/longa distância.
-IR_ATTACK_SPEED = -1200         # Velocidade de ataque a curta distância (MAIS AGRESSIVO).
+# Reduzido para permitir frenagem a tempo
+ATTACK_SPEED = -400             # Velocidade de ataque padrão/longa distância (reduzida).
+IR_ATTACK_SPEED = -700          # Velocidade de ataque a curta distância (reduzida).
 
 # Constantes de Manobra
 RETREAT_DISTANCE = -150         # Distância de recuo ao ver a linha.
 SMART_TURN_ANGLE = 120          # Ângulo de giro para a fuga da borda.
 
 # Constantes de Busca Ativa
-SEARCH_SPEED = -250             # Velocidade de avanço durante a busca.
+SEARCH_SPEED = -150             # Velocidade de avanço durante a busca (reduzida para segurança).
 SEARCH_CURVE_RATE = 100         # Agressividade da curva na busca.
+
+# Helper: frenagem ativa com pequena espera para estabilizar antes de manobrar
+def emergency_stop():
+    # Usa frenagem (não coast) e aguarda para reduzir inércia
+    robot.stop(Stop.BRAKE)
+    wait(150)
 
 # --- 3. PROGRAMA PRINCIPAL ---
 wait(1000)
@@ -51,21 +58,21 @@ while True:
 
     if left_sees_line and right_sees_line:
         print("Borda detectada em AMBOS! Perigo!")
-        robot.stop()
+        emergency_stop()
         robot.straight(RETREAT_DISTANCE)
         robot.turn(180) # Manobra de emergência
         continue
 
     elif left_sees_line:
         print("Borda à ESQUERDA! Virando para a direita.")
-        robot.stop()
+        emergency_stop()
         robot.straight(RETREAT_DISTANCE)
         robot.turn(SMART_TURN_ANGLE)
         continue
     
     elif right_sees_line:
         print("Borda à DIREITA! Virando para a esquerda.")
-        robot.stop()
+        emergency_stop()
         robot.straight(RETREAT_DISTANCE)
         robot.turn(-SMART_TURN_ANGLE)
         continue
