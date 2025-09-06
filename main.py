@@ -2,7 +2,7 @@
 from pybricks.hubs import EV3Brick
 from pybricks.ev3devices import (Motor, ColorSensor, UltrasonicSensor, InfraredSensor)
 from pybricks.parameters import Port, Stop, Button
-from pybricks.tools import wait
+from pybricks.tools import wait, StopWatch
 from pybricks.robotics import DriveBase
 from pybricks.media.ev3dev import SoundFile
 
@@ -45,11 +45,24 @@ STARTUP_SCAN_DURATION_MS = 2000  # tempo total de varredura inicial
 STARTUP_STEP_ANGLE = 25          # pequeno giro para varrer o campo
 STARTUP_STEP_WAIT = 150          # espera entre passos de varredura (ms)
 
+# Giro rápido para evasão (graus por segundo)
+# Aumentado conforme solicitado — teste na pista por segurança
+FAST_TURN_RATE = 1200           # deg/s — velocidade de giro aumentada
+FAST_RETREAT_SPEED = -800       # mm/s para recuo rápido
+OPPOSITE_TURN_ANGLE = 400       # graus para girar para o lado oposto da detecção
+
+# Se os motores estiverem invertidos (frente/reverso trocados), ajuste para True
+# Quando True, os sinais de distância para recuar precisam ser invertidos
+MOTORS_INVERTED = True
+RETREAT_SIGN = 1 if MOTORS_INVERTED else -1
+# Se a orientação física do giro estiver invertida (mapeamento de sinal), ajuste este multiplicador
+TURN_DIRECTION_SIGN = -1 if MOTORS_INVERTED else 1
+
 # Helper: frenagem ativa com pequena espera para estabilizar antes de manobrar
 def emergency_stop():
     # Usa frenagem (não coast) e aguarda para reduzir inércia
     robot.stop(Stop.BRAKE)
-    wait(100)  # reduzido para acelerar resposta sem perder estabilidade
+    wait(80)  # espera menor para resposta mais rápida
 
 # Polling rápido para loops mais responsivos (ms)
 POLL_MS = 5
@@ -127,29 +140,98 @@ while True:
         state = "EDGE_BOTH"
         if state != last_state:
             print("Borda detectada em AMBOS! Perigo!")
+        # parada imediata e estabilização
+        robot.stop(Stop.BRAKE)
+        wait(40)
+
+        # Recuo bloqueante rápido (usa straight para evitar dirigir para frente)
+        try:
+            robot.settings(straight_speed=abs(FAST_RETREAT_SPEED), straight_acceleration=3000)
+        except Exception:
+            pass
+        # Ajuste de direção considerando motores invertidos
+        robot.straight(RETREAT_SIGN * RETREAT_DISTANCE)
+        try:
+            robot.settings(straight_speed=300, straight_acceleration=1000)
+        except Exception:
+            pass
+
+        # Decide direção lógica: sempre virar para o centro (lado oposto à borda detectada)
+        # Quando ambos detectam, escolhemos virar para a direita por padrão
+        desired_dir = 1  # 1 = direita, -1 = esquerda
+        # Calcula taxa física levando em conta possível inversão de giro
+        physical_rate = FAST_TURN_RATE * desired_dir * TURN_DIRECTION_SIGN
+        # Gira rapidamente usando abordagem drive/stop com fallback para motores
+        debug_sw = StopWatch()
+        try:
+            robot.drive(0, physical_rate)
+        except Exception:
+            # fallback direto nos motores (usa sinais compatíveis com physical_rate)
+            left_motor.run(physical_rate)
+            right_motor.run(-physical_rate)
+        # calcula duração aproximada para cobrir o angulo desejado (usa magnitude)
+        duration_ms = int(abs(OPPOSITE_TURN_ANGLE) / (FAST_TURN_RATE / 1000.0))
+        # espera enquanto monitora (curto sleep para responsividade)
+        while debug_sw.time() < duration_ms:
+            wait(5)
+        # garante parada
+        try:
+            robot.stop(Stop.BRAKE)
+        except Exception:
+            left_motor.stop(Stop.BRAKE)
+            right_motor.stop(Stop.BRAKE)
+        wait(80)
         emergency_stop()
-        robot.straight(RETREAT_DISTANCE)
-        robot.turn(180)  # Manobra de emergência
         last_state = state
         continue
 
-    elif left_sees_line:
-        state = "EDGE_LEFT"
+    elif left_sees_line or right_sees_line:
+        state = "EDGE_SIDE"
         if state != last_state:
-            print("Borda à ESQUERDA! Virando para a direita.")
-        emergency_stop()
-        robot.straight(RETREAT_DISTANCE)
-        robot.turn(SMART_TURN_ANGLE)
-        last_state = state
-        continue
+            print("Borda lateral detectada! Recuo rápido e giro oposto de 240°.")
+        # parada imediata e estabilização
+        robot.stop(Stop.BRAKE)
+        wait(40)
 
-    elif right_sees_line:
-        state = "EDGE_RIGHT"
-        if state != last_state:
-            print("Borda à DIREITA! Virando para a esquerda.")
+        # Recuo bloqueante rápido
+        try:
+            robot.settings(straight_speed=abs(FAST_RETREAT_SPEED), straight_acceleration=3000)
+        except Exception:
+            pass
+        # Ajuste de direção considerando motores invertidos
+        robot.straight(RETREAT_SIGN * RETREAT_DISTANCE)
+        try:
+            robot.settings(straight_speed=300, straight_acceleration=1000)
+        except Exception:
+            pass
+
+        # decide direção lógica: se o sensor esquerdo viu a borda -> virar para a direita (centro)
+        if left_sees_line and not right_sees_line:
+            desired_dir = 1
+        elif right_sees_line and not left_sees_line:
+            desired_dir = -1
+        else:
+            desired_dir = 1
+
+        # calcula taxa física considerando inversão global de giro
+        physical_rate = FAST_TURN_RATE * desired_dir * TURN_DIRECTION_SIGN
+        # executa giro com fallback
+        debug_sw = StopWatch()
+        try:
+            robot.drive(0, physical_rate)
+        except Exception:
+            left_motor.run(physical_rate)
+            right_motor.run(-physical_rate)
+        duration_ms = int(abs(OPPOSITE_TURN_ANGLE) / (FAST_TURN_RATE / 1000.0))
+        while debug_sw.time() < duration_ms:
+            wait(5)
+        try:
+            robot.stop(Stop.BRAKE)
+        except Exception:
+            left_motor.stop(Stop.BRAKE)
+            right_motor.stop(Stop.BRAKE)
+        wait(80)
         emergency_stop()
-        robot.straight(RETREAT_DISTANCE)
-        robot.turn(-SMART_TURN_ANGLE)
         last_state = state
         continue
 
